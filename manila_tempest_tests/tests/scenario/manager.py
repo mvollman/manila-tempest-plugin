@@ -20,6 +20,7 @@ import netaddr
 from oslo_log import log
 from oslo_utils import netutils
 import six
+import time
 
 from tempest.common import compute
 from tempest.common import image as common_image
@@ -1079,9 +1080,28 @@ class NetworkScenarioTest(ScenarioTest):
         router = result['router']
         self.assertEqual(router['name'], name)
         self.addCleanup(test_utils.call_and_ignore_notfound_exc,
-                        client.delete_router,
+                        self._delete_router,
                         router['id'])
         return router
+
+    def _delete_router(self, router_id, client=None):
+        if not client:
+            client = self.routers_client
+        router = client.delete_router(router_id)
+        LOG.debug("Deleting router %s", router_id)
+        LOG.debug("Router delete data %s", router)
+        start = int(time.time())
+
+        LOG.debug("Router status %s != 204", router['status'])
+        while router['status'] != '204':
+            time.sleep(self.build_interval)
+            router = client.delete_router(router_id)
+
+            if int(time.time()) - start >= self.build_timeout:
+                message = ('Router %s failed to delete with final status %s '
+                           'within the required time (%s s).' %
+                           (router_id, router['status'], self.build_timeout))
+                raise exceptions.TimeoutException(message)
 
     def _update_router_admin_state(self, router, admin_state_up):
         kwargs = dict(admin_state_up=admin_state_up)
@@ -1132,11 +1152,15 @@ class NetworkScenarioTest(ScenarioTest):
             if not routers_client:
                 routers_client = self.routers_client
             router_id = router['id']
-            routers_client.add_router_interface(router_id,
-                                                subnet_id=subnet['id'])
+            interface = routers_client.add_router_interface(router_id,
+                                                            subnet_id=subnet['id'])
+
+            LOG.debug("Remove create interface %s", interface)
 
             # save a cleanup job to remove this association between
             # router and subnet
+            self.addCleanup(self.ports_client.wait_for_resource_deletion,
+                            interface['port_id'])
             self.addCleanup(test_utils.call_and_ignore_notfound_exc,
                             routers_client.remove_router_interface, router_id,
                             subnet_id=subnet['id'])

@@ -464,7 +464,10 @@ class ShareScenarioTest(manager.NetworkScenarioTest):
             client = self.routers_client
         if not router_id:
             router_id = self._get_router()['id']
-        client.add_router_interface(router_id, subnet_id=subnet_id)
+        interface = client.add_router_interface(router_id, subnet_id=subnet_id)
+        LOG.debug("Set created interface to delete later %s", interface)
+        self.addCleanup(
+            self.ports_client.wait_for_resource_deletion, interface['port_id'])
         self.addCleanup(
             client.remove_router_interface, router_id, subnet_id=subnet_id)
 

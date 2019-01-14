@@ -14,6 +14,7 @@
 #    under the License.
 
 import json
+from oslo_log import log
 import time
 
 import six
@@ -28,6 +29,7 @@ from manila_tempest_tests import share_exceptions
 
 CONF = config.CONF
 
+LOG = log.getLogger(__name__)
 
 class SharesClient(rest_client.RestClient):
     """Tempest REST client for Manila.
@@ -79,6 +81,7 @@ class SharesClient(rest_client.RestClient):
         return self._parse_resp(body)
 
     def delete_share(self, share_id):
+        LOG.debug("delete shares/%s", share_id)
         resp, body = self.delete("shares/%s" % share_id)
         self.expected_success(202, resp.status)
         return body
@@ -150,6 +153,7 @@ class SharesClient(rest_client.RestClient):
             }
         }
         body = json.dumps(post_body)
+        LOG.debug("delete access_rule shares/%s/action %s", share_id, body)
         resp, body = self.post("shares/%s/action" % share_id, body)
         self.expected_success(202, resp.status)
         return body
@@ -214,12 +218,14 @@ class SharesClient(rest_client.RestClient):
         return self.list_snapshots(detailed=True, params=params)
 
     def delete_snapshot(self, snap_id):
+        LOG.debug("delete snapshots/%s", snap_id)
         resp, body = self.delete("snapshots/%s" % snap_id)
         self.expected_success(202, resp.status)
         return body
 
     def wait_for_share_status(self, share_id, status):
         """Waits for a share to reach a given status."""
+        LOG.debug("wait_for_share_status %s", share_id)
         body = self.get_share(share_id)
         share_name = body['name']
         share_status = body['status']
@@ -342,6 +348,7 @@ class SharesClient(rest_client.RestClient):
         :param kwargs: 'sn_id', 'ss_id', 'vt_id' and 'server_id'
         :raises share_exceptions.InvalidResource
         """
+        LOG.debug("Checking is_resource_deleted")
         if "share_id" in kwargs:
             if "rule_id" in kwargs:
                 rule_id = kwargs.get("rule_id")
@@ -381,6 +388,19 @@ class SharesClient(rest_client.RestClient):
             res = func(res_id)
         except exceptions.NotFound:
             return True
+
+        count = 0
+        retry_count = 3
+        while count < retry_count:
+            try:
+                res = func(res_id)
+            except exceptions.NotFound:
+                return True
+
+            self.delete_share_server(res_id)
+            self.wait_for_resource_deletion(ss_id=res_id)
+            count += 1
+
         if res.get('status') in ['error_deleting', 'error']:
             # Resource has "error_deleting" status and can not be deleted.
             resource_type = func.__name__.split('_', 1)[-1]
@@ -390,6 +410,7 @@ class SharesClient(rest_client.RestClient):
 
     def wait_for_resource_deletion(self, *args, **kwargs):
         """Waits for a resource to be deleted."""
+        LOG.debug("wait_for_resource_deletion")
         start_time = int(time.time())
         while True:
             if self.is_resource_deleted(*args, **kwargs):
@@ -444,6 +465,7 @@ class SharesClient(rest_client.RestClient):
         """
         body = {"os-force_delete": None}
         body = json.dumps(body)
+        LOG.debug("force delete %s/%s/action %s", s_type, s_id, body)
         resp, body = self.post("%s/%s/action" % (s_type, s_id), body)
         self.expected_success(202, resp.status)
         return body
@@ -481,6 +503,7 @@ class SharesClient(rest_client.RestClient):
         return self._update_metadata(share_id, metadata, method="put")
 
     def delete_metadata(self, share_id, key):
+        LOG.debug("delete shares/%s/metadata/%s", share_id, key)
         resp, body = self.delete("shares/%s/metadata/%s" % (share_id, key))
         self.expected_success(200, resp.status)
         return body
@@ -570,6 +593,7 @@ class SharesClient(rest_client.RestClient):
         return self._parse_resp(body)
 
     def delete_share_network(self, sn_id):
+        LOG.debug("delete share-networks/%s", sn_id)
         resp, body = self.delete("share-networks/%s" % sn_id)
         self.expected_success(202, resp.status)
         return body
@@ -627,6 +651,7 @@ class SharesClient(rest_client.RestClient):
         return self._parse_resp(body)
 
     def delete_share_type(self, share_type_id):
+        LOG.debug("delete types/%s", share_type_id)
         resp, body = self.delete("types/%s" % share_type_id)
         self.expected_success(202, resp.status)
         return body
@@ -700,6 +725,7 @@ class SharesClient(rest_client.RestClient):
         return self._parse_resp(body)
 
     def delete_share_type_extra_spec(self, share_type_id, extra_spec_name):
+        LOG.debug("delete types/%s/extra_specs/%s", share_type_id, extra_spec_name)
         uri = "types/%s/extra_specs/%s" % (share_type_id, extra_spec_name)
         resp, body = self.delete(uri)
         self.expected_success(202, resp.status)
@@ -718,6 +744,7 @@ class SharesClient(rest_client.RestClient):
 
     def delete_share_server(self, share_server_id):
         """Delete share server by its ID."""
+        LOG.debug("delete share-servers/%s", share_server_id)
         uri = "share-servers/%s" % share_server_id
         resp, body = self.delete(uri)
         self.expected_success(202, resp.status)
