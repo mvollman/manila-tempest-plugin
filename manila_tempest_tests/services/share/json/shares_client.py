@@ -14,6 +14,7 @@
 #    under the License.
 
 import json
+from oslo_log import log
 import time
 
 import six
@@ -28,6 +29,7 @@ from manila_tempest_tests import share_exceptions
 
 CONF = config.CONF
 
+LOG = log.getLogger(__name__)
 
 class SharesClient(rest_client.RestClient):
     """Tempest REST client for Manila.
@@ -80,6 +82,7 @@ class SharesClient(rest_client.RestClient):
 
     def delete_share(self, share_id):
         resp, body = self.delete("shares/%s" % share_id)
+        LOG.debug("delete shares/%s %s", share_id, body)
         self.expected_success(202, resp.status)
         return body
 
@@ -111,6 +114,7 @@ class SharesClient(rest_client.RestClient):
         uri = 'shares/detail' if detailed else 'shares'
         uri += '?%s' % urlparse.urlencode(params) if params else ''
         resp, body = self.get(uri)
+        LOG.debug("shares/list %s", body)
         self.expected_success(200, resp.status)
         return self._parse_resp(body)
 
@@ -120,6 +124,7 @@ class SharesClient(rest_client.RestClient):
 
     def get_share(self, share_id):
         resp, body = self.get("shares/%s" % share_id)
+        LOG.debug("get shares/%s %s", share_id, body)
         self.expected_success(200, resp.status)
         return self._parse_resp(body)
 
@@ -224,8 +229,10 @@ class SharesClient(rest_client.RestClient):
         share_name = body['name']
         share_status = body['status']
         start = int(time.time())
+        LOG.debug("wait_for_share_status %s %s != %s", share_id, share_status, status)
 
         while share_status != status:
+            LOG.debug("wait_for_share_status %s %s != %s", share_id, share_status, status)
             time.sleep(self.build_interval)
             body = self.get_share(share_id)
             share_status = body['status']
@@ -342,6 +349,7 @@ class SharesClient(rest_client.RestClient):
         :param kwargs: 'sn_id', 'ss_id', 'vt_id' and 'server_id'
         :raises share_exceptions.InvalidResource
         """
+        LOG.debug("is_resource_deleted %s", kwargs)
         if "share_id" in kwargs:
             if "rule_id" in kwargs:
                 rule_id = kwargs.get("rule_id")
@@ -377,6 +385,7 @@ class SharesClient(rest_client.RestClient):
                 message=six.text_type(kwargs))
 
     def _is_resource_deleted(self, func, res_id):
+        LOG.debug("_is_resource_deleted %s", res_id)
         try:
             res = func(res_id)
         except exceptions.NotFound:
@@ -390,6 +399,7 @@ class SharesClient(rest_client.RestClient):
 
     def wait_for_resource_deletion(self, *args, **kwargs):
         """Waits for a resource to be deleted."""
+        LOG.debug("wait_for_resource_deletion %s", kwargs)
         start_time = int(time.time())
         while True:
             if self.is_resource_deleted(*args, **kwargs):
